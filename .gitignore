@@ -1,0 +1,8 @@
+data/
+bert-base-uncased/
+*.txt
+*.pt
+*.gz
+__pycache__/
+.ipynb_checkpoints/
+.vector_cache/
