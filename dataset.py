@@ -11,12 +11,10 @@ from tqdm import tqdm
 
 class BertField(data.Field):
     
-    def __init__(self, tokenizer):
-        super().__init__(pad_token = "[PAD]",
-                         lower = False)
+    def __init__(self, tokenizer, fix_length=None):
+        super().__init__(pad_token = "[PAD]",fix_length=fix_length, lower = False)
         self.tokenizer = tokenizer
         self.tokenize = self.tokenizer.tokenize
-
         
     def numericalize(self, batch, device=None):
         batch_seq_ids = []
@@ -51,7 +49,7 @@ class QDataset(data.Dataset):
         
 class DataHandler:
     
-    def __init__(self, train_path, val_path, fields, word_field):
+    def __init__(self, train_path, val_path, fields):
         if train_path.endswith('json'):
             print(f'load json data :{train_path}, {val_path}')
             trainset = QDataset(train_path, fields)
@@ -70,8 +68,6 @@ class DataHandler:
             trainset = data.Dataset(train_examples, fields)
             valset = data.Dataset(val_examples, fields)
             
-        word_field.build_vocab(trainset, valset, vectors=torchtext.vocab.GloVe(dim=300,name='6B') )
-        self.word_field = word_field
         self.trainset = trainset
         self.valset = valset
         
