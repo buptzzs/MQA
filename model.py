@@ -88,7 +88,7 @@ class BiAttention(nn.Module):
 
         self.dot_scale = nn.Parameter(torch.Tensor(input_size).uniform_(1.0 / (input_size ** 0.5)))
 
-    def forward(self, input, memory, mask):
+    def forward(self, input, memory, mask=None):
         bsz, input_len, memory_len = input.size(0), input.size(1), memory.size(1)
 
         input = self.dropout(input)
@@ -98,7 +98,9 @@ class BiAttention(nn.Module):
         memory_dot = self.memory_linear(memory).view(bsz, 1, memory_len)
         cross_dot = torch.bmm(input * self.dot_scale, memory.permute(0, 2, 1).contiguous())
         att = input_dot + memory_dot + cross_dot
-        att = att - 1e30 * (1 - mask[:,None])
+        
+        if mask is not None:
+            att = att - 1e30 * (1 - mask[:,None])
 
         weight_one = F.softmax(att, dim=-1)
         output_one = torch.bmm(weight_one, memory)
