@@ -11,52 +11,26 @@ from tqdm import tqdm
 from flair.data import Sentence
 import pickle
 
-def preprocess(json_path, max_sentence=300):
-    flair_data = []
-    data = json.load(open(json_path))
-    for d in tqdm(data):    
+
+
+def preprocess(json_path):
+    result = []
+    json_data = json.load(open(json_path))
+    for d in tqdm(json_data):    
         cur = {}
         cur['id'] = d['id']
-
-        query = d['query']
-        cur['query'] = Sentence(query.replace('_',' '))
-
-        candidates = d['candidates']
-        answer = d['answer']
-
+        cur['query'] = d['query'].replace('_',' ')
+        cur['candidates'] = d['candidates']
+        cur['answer'] = d['answer']
         label = -1
-        for i in range(len(candidates)):
-            if candidates[i] == answer:
+        for i in range(len(d['candidates'])):
+            if d['candidates'][i] == d['answer']:
                 label = i
         assert label != -1
-
         cur['label'] = label
-
-        cur['candidates'] = [Sentence(candidate) for candidate in candidates]
-
-
-        supports = d['supports']
-        sentences = []
-        for s in supports:
-            s_sentence = s.strip().split(' ')
-            n_sentence = s
-            if(len(s_sentence) > max_sentence):
-                n_sentence = ' '.join(s_sentence)
-            sentences.append(Sentence(n_sentence))
-        cur['supports'] = sentences
-        flair_data.append(cur)
-    return flair_data
-
-
-def load_data(path, max_sentence=300):
-    if path.endswith('json'):
-        data = preprocess(path, max_sentence=max_sentence)
-        flair_path = path.replace('json','pkl')
-        pickle.dump(data, open(flair_path, 'wb'))
-    else:
-        print(f'loading {path}...')
-        data = pickle.load(open(path,'rb'))
-    return data
+        cur['supports'] = d['supports']
+        result.append(cur)
+    return result
 
 
 class BertField(data.Field):

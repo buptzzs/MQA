@@ -8,6 +8,37 @@ from torch.nn import init
 from torch.nn.utils import rnn
 
 
+class EmbeddingLayer(nn.Module):
+    """ Embedding Layer 
+    
+    Attributes:
+        word_embedding: use Glove pretrained embedding vectors
+        nGram_embeding: use CharNGram pretrained embedding vectors
+    TODO:
+        add Char CNN embedding
+        add Bert Embedding
+    """
+    
+    def __init__(self, word_vectors, charNGram_vectors):
+        super(EmbeddingLayer, self).__init__()
+        
+        charNGram_vectors[1] = torch.zeros(100)
+        self.word_embedding = nn.Embedding.from_pretrained(word_vectors, freeze=True)
+        self.nGram_embedding = nn.Embedding.from_pretrained(charNGram_vectors, freeze=True)
+        
+    def forward(self, glove_input, charNGram_input):
+        '''
+        Arguments:
+            glove_input: shape of [n_sentence, n_word]
+            charNgram_input: shape of [n_sentence, n_word]
+            
+        return:
+            embedding: shape of [n_sentence, n_word, glove_dim + charNgram_dim]
+        '''
+        g_emb = self.word_embedding(glove_input)
+        c_emb = self.nGram_embedding(charNGram_input)
+        return torch.cat([g_emb, c_emb], dim=-1)
+
 class LockedDropout(nn.Module):
     def __init__(self, dropout):
         super().__init__()
