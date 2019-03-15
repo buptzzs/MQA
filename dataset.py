@@ -8,6 +8,30 @@ from torchtext import data
 from pytorch_pretrained_bert import BertTokenizer, BertModel, BertForMaskedLM
 from tqdm import tqdm
 
+from flair.data import Sentence
+import pickle
+
+
+
+def preprocess(json_path):
+    result = []
+    json_data = json.load(open(json_path))
+    for d in tqdm(json_data):    
+        cur = {}
+        cur['id'] = d['id']
+        cur['query'] = d['query'].replace('_',' ')
+        cur['candidates'] = d['candidates']
+        cur['answer'] = d['answer']
+        label = -1
+        for i in range(len(d['candidates'])):
+            if d['candidates'][i] == d['answer']:
+                label = i
+        assert label != -1
+        cur['label'] = label
+        cur['supports'] = d['supports']
+        result.append(cur)
+    return result
+
 
 class BertField(data.Field):
     
