@@ -156,7 +156,7 @@ class SelfAttention(nn.Module):
     def __init__(self, n_input: int, attn_dimension: int = 64, dropout: float = 0.4) -> None:
         super().__init__()
 
-        self.dropout = nn.Dropout(dropout)
+        self.dropout = LockedDropout(dropout)
         self.n_input = n_input
         self.n_attn = attn_dimension
         self.ws1 = nn.Linear(n_input, self.n_attn, bias=False)
@@ -174,12 +174,120 @@ class SelfAttention(nn.Module):
     ) -> torch.Tensor:
         # size: (bsz, sent_len, rep_dim)
         size = inputs.size()
+        inputs = self.dropout(inputs)
         compressed_emb = inputs.contiguous().view(-1,size[-1])
         hbar = self.tanh(
-            self.ws1(self.dropout(compressed_emb))
+            self.ws1(compressed_emb)
         )  # (bsz * sent_len, attention_dim)
         alphas = self.ws2(hbar)  # (bsz * sent_len, 1)
         alphas = alphas.view(size[:2]) # (bsz, sent_len)
         alphas = self.softmax(alphas)  # (bsz, sent_len)
         # (bsz, rep_dim)
         return torch.bmm(alphas.unsqueeze(1), inputs).squeeze(1)    
+    
+    
+class CoAttention(nn.Module):
+    
+    def __init__(self, hidden_dims, att_type=0, dropout=0.2):
+        super(CoAttention, self).__init__()
+        self.dropout = LockedDropout(dropout)        
+        self.G = nn.Linear(hidden_dims, hidden_dims, bias=True)
+        self.att_type = att_type
+    def forward(self, a1, a2):
+        '''
+            a1: n * L * d
+            a2: n * K * d
+        return:
+            M1: n* L * d
+            M2: n * K * d
+            
+        '''
+        a1 = self.dropout(a1)
+        a2 = self.dropout(a2)
+        
+        if self.att_type == 0:
+            a2_ = self.G(a2)
+            L = torch.bmm(a1, a2_.permute(0, 2, 1))
+        elif self.att_type == 1:
+            a1_ = F.relu(self.G(a1))
+            a2_ = F.relu(self.G(a2))
+            L = torch.bmm(a1_, a2_.permute(0, 2, 1))            
+        else:
+            L = torch.bmm(a1, a2.permute(0,2,1))
+            
+        A1 = torch.softmax(L, 2) # N, L , K
+        A2 = torch.softmax(L, 1) 
+        A2 = A2.permute(0,2,1) # N, K, L
+        
+        M_1 = torch.bmm(A1, a2) # N, L, d
+        M_2 = torch.bmm(A2, a1) # N, K, d
+        
+        if self.att_type == 2:
+            M_3 = torch.bmm(A1, M_2)
+            M_1 = torch.cat([M_1,M_3], dim=-1)
+
+        return M_1, M_2
+        
+class FusionLayer(nn.Module):
+    
+    def __init__(self, dim=100, dropout=0.2):
+        super().__init__()
+        self.dropout = LockedDropout(dropout)        
+        self.linear = nn.Linear(dim*2, dim, bias=True)
+        self.act = nn.ReLU()
+        
+    def forward(self, a1, a2):
+        assert a1.size() == a2.size()
+        
+        mid = torch.cat([a1 - a2, a1 * a2], -1)
+        return self.act(self.linear(self.dropout(mid)))
+    
+class PoolingLayer(nn.Module):
+    '''
+    pooling operation: max pooling and attentive pooling 
+    '''
+    
+    def __init__(self, max_pooling=True, dim=None, dropout=0.2):            
+        super(PoolingLayer, self).__init__()
+        
+        self.max_pooling = max_pooling
+        if not max_pooling:
+            self.dropout = LockedDropout(dropout)
+            self.linear = nn.Linear(dim, 1, bias=True)
+        
+    def forward(self, x):
+        '''
+        x: n * L * d
+        '''
+        if self.max_pooling:
+            out, _ = torch.max(x, 1)
+            return out
+        else:
+            score = self.linear(self.dropout(x)) # n * L * 1
+            alpha = torch.softmax(score, -1) 
+            out = torch.bmm(x.permute(0,2,1), alpha) # n * d * 1
+            out = out.squeeze()
+            return out    
+        
+        
+class BilinearSeqAttn(nn.Module):
+    """A bilinear attention layer over a sequence X w.r.t y:
+    * o_i = x_i'Wy for x_i in X.
+    """
+    def __init__(self, x_size, y_size, identity=False, dropout=0.2):
+        super(BilinearSeqAttn, self).__init__()
+        if not identity:
+            self.linear = nn.Linear(y_size, x_size)
+        else:
+            self.linear = None          
+
+    def forward(self, x, y):
+        """
+        x = batch * len * h1
+        y = batch * h2
+        """
+
+
+        Wy = self.linear(y) if self.linear is not None else y  # batch * h1
+        xWy = x.bmm(Wy.unsqueeze(2)).squeeze(2)  # batch * len
+        return xWy        
