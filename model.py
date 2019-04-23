@@ -36,7 +36,7 @@ class EmbeddingLayer(nn.Module):
             embedding: shape of [n_sentence, n_word, glove_dim + charNgram_dim]
         '''
         g_emb = self.word_embedding(glove_input)
-        if charNGram_input is not None
+        if charNGram_input is not None:
             c_emb = self.nGram_embedding(charNGram_input)
             return torch.cat([g_emb, c_emb], dim=-1)
         return g_emb
